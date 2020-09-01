@@ -61,6 +61,7 @@ int main(int argc, char** argv )
         return -1;
     }
 
+    namedWindow("Before");
     namedWindow(window_capture_name);
     namedWindow(window_detection_name);
     // Trackbars to set thresholds for HSV values
@@ -71,28 +72,59 @@ int main(int argc, char** argv )
     createTrackbar("Low V", window_detection_name, &low_V, max_value, on_low_V_thresh_trackbar);
     createTrackbar("High V", window_detection_name, &high_V, max_value, on_high_V_thresh_trackbar);
 
-    Mat frame, frame_HSV, frame_threshold;
+    Mat frame, frame_HSV, green_mask;
     while (true) {
 	    frame = image.clone();
 	    // Convert from BGR to HSV colorspace
 	    cvtColor(frame, frame_HSV, COLOR_BGR2HSV);
 	    // Detect the object based on HSV Range Values
-	    inRange(frame_HSV, Scalar(low_H, low_S, low_V), Scalar(high_H, high_S, high_V), frame_threshold);
+        // low_H = 60;
+        // low_S = 102;
+        // low_V = 45;
+        // high_H = 130;
+        // high_S = 255;
+        // high_V = 255;
+	    inRange(frame_HSV, Scalar(low_H, low_S, low_V), Scalar(high_H, high_S, high_V), green_mask);
 
-	    Mat reverse;
-	    Mat result = Mat::zeros(frame.size(), frame.type());
-	    bitwise_not (frame_threshold, reverse);
-	    frame.copyTo(result, reverse);
-	    Mat erode_result;
-	    erode(result, erode_result, Mat());
-	    imshow(window_detection_name, reverse);
-	    imshow(window_capture_name, erode_result);
+	    Mat mask;
+	    Mat masked_frame = Mat::zeros(frame.size(), frame.type());
+	    bitwise_not (green_mask, mask);
+        dilate(mask, mask, Mat());
+        erode(mask, mask, Mat());
+	    frame.copyTo(masked_frame, mask);
+
+        imshow("Before", masked_frame);
+
+        // reduce green
+        Mat masked_frame_HSV;
+        cvtColor(masked_frame, masked_frame_HSV, COLOR_BGR2HSV);
+        for (int row = 0; row < masked_frame_HSV.rows; row++) {
+            for (int col = 0; col < masked_frame_HSV.cols; col++) {
+                Vec3b hsv = masked_frame_HSV.at<Vec3b>(Point(col, row));
+                if (hsv[0] >= 35 && hsv[0] <= 130 && hsv[1] >= 0.15 * 255 && hsv[2] >= 0.15 * 255) {
+                    Vec3b rgb = masked_frame.at<Vec3b>(Point(col, row));
+                    int r = rgb[0];
+                    int g = rgb[1];
+                    int b = rgb[2];
+                    
+                    if (r * b != 0 && (g * g) / (r * b) > 1.5) {
+                        masked_frame.at<Vec3b>(Point(col, row)) = Vec3b((int)r * 1.7, g, (int)b * 1.7);
+                    } else {
+                        masked_frame.at<Vec3b>(Point(col, row)) = Vec3b((int)r * 1.5, g, (int)b * 1.5);
+                    }
+                }
+            }
+        }
+        
+
+	    imshow(window_detection_name, mask);
+	    imshow(window_capture_name, masked_frame);
 
 	    
 	    char key = (char) waitKey(30);
 	    if (key == 'q' || key == 27)
 	    {
-		break;
+		    break;
 	    }
     }
     return 0;
